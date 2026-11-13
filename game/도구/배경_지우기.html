@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>캐릭터 배경 지우기</title>
+<style>
+  :root{ --ink:#2b2024; --paper:#f6f1e3; --green:#6f9a4c; --coral:#e07a5f; }
+  body{ margin:0; padding:28px; background:#3b3036; color:var(--ink); font-family:'Malgun Gothic',sans-serif; }
+  .card{ background:var(--paper); border:4px solid var(--ink); border-radius:22px; padding:22px 26px; max-width:1100px; margin:0 auto 20px; }
+  h1{ margin:0 0 8px; font-size:28px; } p{ margin:6px 0; line-height:1.6; }
+  label.pick{ display:inline-block; margin-top:10px; padding:12px 24px; background:var(--green); color:#fff; border:4px solid var(--ink); border-radius:18px; font-size:20px; cursor:pointer; }
+  input[type=file]{ display:none; }
+  .row{ display:flex; align-items:center; gap:12px; margin-top:12px; font-size:17px; }
+  .list{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; max-width:1100px; margin:0 auto; }
+  .item{ background:var(--paper); border:4px solid var(--ink); border-radius:18px; padding:12px; text-align:center; }
+  .item canvas{ width:100%; height:300px; object-fit:contain; border-radius:12px;
+    background:conic-gradient(#ddd 25%, #fff 0 50%, #ddd 0 75%, #fff 0) 0 0/20px 20px; }
+  .item a{ display:inline-block; margin-top:8px; padding:8px 18px; background:var(--coral); color:#fff; border:3px solid var(--ink); border-radius:14px; text-decoration:none; }
+  .item small{ display:block; margin-top:4px; color:#6d5d4b; word-break:break-all; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>캐릭터 배경 지우기</h1>
+  <p>이미지 생성 도구에서 만든 캐릭터 그림의 <b>단색 배경</b>(흰색, 회색 등)을 투명하게 바꿉니다. 인터넷 없이 이 컴퓨터 안에서만 처리돼요.</p>
+  <p>① 그림을 고르고 → ② 미리보기를 확인한 뒤 → ③ <b>저장</b>을 눌러 <code>game/assets/characters</code> 폴더에 넣어 주세요. (파일 이름은 안내 문서의 이름과 같아야 해요.)</p>
+  <label class="pick">그림 고르기<input type="file" id="files" accept="image/*" multiple></label>
+  <div class="row">배경 지우는 정도 <input type="range" id="tol" min="10" max="120" value="48"> <span id="tolv">48</span>
+    <span style="color:#6d5d4b">(배경이 남으면 올리고, 캐릭터가 지워지면 내려 주세요)</span></div>
+</div>
+<div class="list" id="list"></div>
+
+<script>
+const files = document.getElementById('files'), tol = document.getElementById('tol'), list = document.getElementById('list');
+let loaded = [];
+
+files.addEventListener('change', async () => {
+  loaded = [];
+  for (const f of files.files) loaded.push({ name:f.name.replace(/\.[^.]+$/, '') + '.png', img:await readImage(f) });
+  render();
+});
+tol.addEventListener('input', () => { document.getElementById('tolv').textContent = tol.value; render(); });
+
+function readImage(file){
+  return new Promise(res => { const r = new FileReader(); r.onload = () => { const im = new Image(); im.onload = () => res(im); im.src = r.result; }; r.readAsDataURL(file); });
+}
+
+/* 가장자리에서 시작해 배경색과 비슷한 부분만 지웁니다 (캐릭터 안쪽의 흰색은 남아요) */
+function removeBg(img, t){
+  const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width, H = c.height;
+  const corners = [0, W-1, (H-1)*W, H*W-1].map(i => [p[i*4], p[i*4+1], p[i*4+2]]);
+  const bg = corners.reduce((a, b) => [a[0]+b[0]/4, a[1]+b[1]/4, a[2]+b[2]/4], [0,0,0]);
+  const dist = i => Math.hypot(p[i*4]-bg[0], p[i*4+1]-bg[1], p[i*4+2]-bg[2]);
+  const seen = new Uint8Array(W*H), stack = [];
+  for (let i = 0; i < W; i++){ stack.push(i, (H-1)*W + i); }
+  for (let j = 0; j < H; j++){ stack.push(j*W, j*W + W-1); }
+  while (stack.length){
+    const i = stack.pop();
+    if (seen[i]) continue; seen[i] = 1;
+    const dd = dist(i);
+    if (dd > t) continue;
+    p[i*4+3] = dd > t * .6 ? Math.round(255 * (dd - t*.6) / (t*.4)) : 0;   // 경계는 부드럽게
+    const xx = i % W;
+    if (xx > 0) stack.push(i-1); if (xx < W-1) stack.push(i+1);
+    if (i >= W) stack.push(i-W); if (i < W*(H-1)) stack.push(i+W);
+  }
+  x.putImageData(d, 0, 0);
+  return c;
+}
+
+function render(){
+  list.innerHTML = '';
+  loaded.forEach(({ name, img }) => {
+    const c = removeBg(img, +tol.value);
+    const box = document.createElement('div'); box.className = 'item';
+    box.appendChild(c);
+    const a = document.createElement('a'); a.textContent = '저장'; a.download = name; a.href = c.toDataURL('image/png');
+    const s = document.createElement('small'); s.textContent = name;
+    box.appendChild(a); box.appendChild(s); list.appendChild(box);
+  });
+}
+</script>
+</body>
+</html>
