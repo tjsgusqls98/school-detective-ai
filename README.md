@@ -10,6 +10,7 @@
 
 ## 실행 방법
 
+- **웹에서 바로 하기:** https://tjsgusqls98.github.io/school-detective-ai/
 - **가장 간단한 방법:** `학교 탐정단_한파일.html` 하나만 내려받아 Microsoft Edge나 Chrome으로 엽니다.
 - **폴더 버전:** `game` 폴더를 통째로 내려받아 `game/학교 탐정단.html`을 엽니다.
 
